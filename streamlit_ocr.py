@@ -68,3 +68,15 @@ if uploaded_file is not None:
                                     },
                                     {
                                         "type": "image_url",
+                                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                                    }
+                                ],
+                            }
+                        ],
+                    )
+
+                    final_output += response.choices[0].message.content + "\n\n"
+
+                st.subheader("Transcription Results")
+                st.text_area("Final Output", value=final_output, height=400)
+                st.download_button("📥 Download .txt", final_output, "transcription.txt")
