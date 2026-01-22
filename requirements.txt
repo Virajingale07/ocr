@@ -1,6 +1,5 @@
 streamlit
-easyocr
+pytesseract
 opencv-python-headless
 pillow
 numpy
-pdf2image
