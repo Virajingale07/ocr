@@ -1,5 +1,5 @@
 streamlit
+groq
 pillow
-numpy
-Groq
 pdf2image
+numpy
