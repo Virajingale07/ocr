@@ -1,69 +1,65 @@
 import streamlit as st
-import pytesseract
+import base64
+from groq import Groq
 from PIL import Image
-import numpy as np
-import cv2
+import io
 
-# --- CONFIGURATION ---
-# If on Windows, you MUST point to the tesseract.exe location
-# Example: r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-# On Linux/Cloud, this line is usually not needed.
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Page Setup
+st.set_page_config(page_title="Groq AI OCR", page_icon="⚡")
+st.title("⚡ AI OCR (Powered by Groq)")
 
-st.set_page_config(page_title="Tesseract OCR Pro", page_icon="🔍", layout="wide")
-st.title("🔍 Tesseract Paper Text Extractor")
+# 1. Logic: Retrieve API Key from Streamlit Secrets
+# This replaces the hardcoded string for security
+try:
+    groq_api_key = st.secrets["GROQ_API_KEY"]
+except KeyError:
+    st.error("API Key not found in Streamlit Secrets! Please add 'GROQ_API_KEY' to your app settings.")
+    st.stop()
 
-
-# 1. Logic: Image Preprocessing (Crucial for Tesseract)
-def get_grayscale(image):
-    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-
-def remove_noise(image):
-    return cv2.medianBlur(image, 5)
+# Initialize Client
+client = Groq(api_key=groq_api_key)
 
 
-def thresholding(image):
-    return cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+def encode_image(image_file):
+    # Logic: Read the file buffer and convert to base64
+    return base64.b64encode(image_file.read()).decode('utf-8')
 
 
-# 2. UI: Sidebar
-st.sidebar.header("Tesseract Settings")
-psm = st.sidebar.selectbox("Page Segmentation Mode (PSM)",
-                           [3, 4, 6, 11, 12], index=0,
-                           help="3: Default, 6: Uniform block of text, 11: Sparse text")
-
-# 3. UI: File Uploader
-uploaded_file = st.file_uploader("Upload Image", type=['png', 'jpg', 'jpeg'])
+# 2. UI: File Uploader
+uploaded_file = st.file_uploader("Upload Image for Extraction", type=['png', 'jpg', 'jpeg'])
 
 if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    img_np = np.array(image)
+    st.image(uploaded_file, caption="Uploaded Image", width=400)
 
-    col1, col2 = st.columns(2)
+    if st.button("🚀 Run AI OCR"):
+        with st.spinner("Llama 3.2 Vision is processing..."):
+            try:
+                # Logic: Prepare the image for the Vision API
+                base64_image = encode_image(uploaded_file)
 
-    with col1:
-        st.subheader("Original Image")
-        st.image(image, use_container_width=True)
+                # 3. Logic: Call Groq Llama 3.2 Vision Model
+                response = client.chat.completions.create(
+                    model="llama-3.2-11b-vision-preview",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "Please transcribe the text in this image accurately."},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                                },
+                            ],
+                        }
+                    ],
+                )
 
-    if st.button("🚀 Extract Text"):
-        with st.spinner("Tesseract is processing..."):
-            # 4. Logic: Preprocessing for better accuracy
-            gray = get_grayscale(img_np)
-            thresh = thresholding(gray)
+                extracted_text = response.choices[0].message.content
 
-            # 5. OCR Execution
-            # PSM 6 is generally best for uniform handwritten or printed pages
-            custom_config = f'--oem 3 --psm {psm}'
-            extracted_text = pytesseract.image_to_string(thresh, config=custom_config)
+                # 4. Results
+                st.subheader("Extracted Content")
+                st.text_area("Final Transcription", value=extracted_text, height=300)
+                st.download_button("📥 Download .txt", extracted_text, "extracted_text.txt")
 
-            with col2:
-                st.subheader("Processed Logic View")
-                st.image(thresh, caption="What Tesseract 'sees' (Binarized)", use_container_width=True)
-
-            # 6. Display Results
-            st.divider()
-            st.subheader("📝 Extracted Text")
-            st.text_area("Final Output", value=extracted_text, height=300)
-
-            st.download_button("📥 Download .txt", extracted_text, "tesseract_output.txt")
+            except Exception as e:
+                st.error(f"Processing Error: {e}")
